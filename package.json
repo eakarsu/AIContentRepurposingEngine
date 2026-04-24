@@ -1,0 +1,14 @@
+{
+  "name": "ai-content-repurposing-engine",
+  "version": "1.0.0",
+  "description": "AI Content Repurposing Engine - Transform one piece of content into many",
+  "scripts": {
+    "start": "bash start.sh",
+    "backend": "cd backend && npx nodemon server.js",
+    "frontend": "cd frontend && npx react-scripts start",
+    "dev": "npx concurrently \"npm run backend\" \"npm run frontend\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
