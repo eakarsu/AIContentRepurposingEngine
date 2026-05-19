@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FiZap, FiLogOut, FiTrendingUp } from 'react-icons/fi';
+import { FiZap, FiLogOut, FiTrendingUp, FiGrid } from 'react-icons/fi';
 
 function Navbar({ breadcrumbs = [] }) {
   const navigate = useNavigate();
@@ -47,6 +47,9 @@ function Navbar({ breadcrumbs = [] }) {
       <div className="navbar-right">
         <Link to="/advanced" className="btn btn-outline" style={{ marginRight: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px' }}>
           <FiTrendingUp /> Advanced
+        </Link>
+        <Link to="/custom-views" className="btn btn-outline" data-testid="nav-content-views" style={{ marginRight: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px' }}>
+          <FiGrid /> Content Views
         </Link>
         <div className="navbar-user">
           <div className="navbar-avatar">{initials}</div>

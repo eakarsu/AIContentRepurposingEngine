@@ -18,7 +18,7 @@ const PORT = process.env.BACKEND_PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3100', 'http://127.0.0.1:3100'],
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -86,6 +86,14 @@ app.use('/api/gap-no-a-b-testing-or-variant-management', require('./routes/gap_n
 
 // // === Batch 02 Gaps & Frontend Mounts ===
 app.use('/api/gap-no-webhooks', require('./routes/gap_no_webhooks'));
+
+// === Custom Views (format performance, channel heatmap, content plan PDF, repurposing rules) ===
+app.use('/api/custom-views', require('./routes/customViews'));
+
+// 404 handler - MUST be last route handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.originalUrl });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

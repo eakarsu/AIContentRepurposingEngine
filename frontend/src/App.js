@@ -20,6 +20,7 @@ import GapNoContentApprovalWorkflow from './pages/GapNoContentApprovalWorkflow';
 import GapNoAudienceSegmentationOrPersonalization from './pages/GapNoAudienceSegmentationOrPersonalization';
 import GapNoABTestingOrVariantManagement from './pages/GapNoABTestingOrVariantManagement';
 import GapNoWebhooks from './pages/GapNoWebhooks';
+import CustomViewsPage from './pages/CustomViewsPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
@@ -67,6 +68,7 @@ function App() {
         <Route path="/gap/no-audience-segmentation-or-personalization" element={<GapNoAudienceSegmentationOrPersonalization />} />
         <Route path="/gap/no-a-b-testing-or-variant-management" element={<GapNoABTestingOrVariantManagement />} />
         <Route path="/gap/no-webhooks" element={<GapNoWebhooks />} />
+        <Route path="/custom-views" element={<PrivateRoute><CustomViewsPage /></PrivateRoute>} />
       </Routes>
     </div>
   );
