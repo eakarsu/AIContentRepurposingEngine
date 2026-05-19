@@ -5,7 +5,7 @@ import {
   FiDatabase, FiShare2, FiVideo, FiMic, FiMail,
   FiSearch, FiTwitter, FiBriefcase, FiCamera, FiYoutube,
   FiFileText, FiType, FiGlobe, FiDollarSign, FiBookOpen,
-  FiArrowRight
+  FiArrowRight, FiTrendingUp
 } from 'react-icons/fi';
 import Navbar from '../components/Navbar';
 
@@ -55,6 +55,23 @@ function Dashboard() {
           <h2>Content Dashboard</h2>
           <p>Choose a tool to repurpose your content with AI</p>
         </div>
+
+        <div className="features-grid" style={{ marginBottom: 24 }}>
+          <div
+            className="feature-card"
+            onClick={() => navigate('/advanced')}
+            style={{ background: 'linear-gradient(135deg, #6c63ff22, #00d2ff22)', border: '2px solid #6c63ff44' }}
+          >
+            <div className="feature-card-icon"><FiTrendingUp /></div>
+            <h3>Advanced AI Tools</h3>
+            <p>Analytics, content calendar, brand-voice, A/B variants, content series and 4 more.</p>
+            <div className="feature-card-footer">
+              <span className="feature-card-count"><strong>NEW</strong> 8 features + analytics</span>
+              <span className="feature-card-arrow"><FiArrowRight /></span>
+            </div>
+          </div>
+        </div>
+
         <div className="features-grid">
           {FEATURES.map(f => {
             const Icon = f.icon;
