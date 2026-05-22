@@ -22,6 +22,12 @@ import GapNoABTestingOrVariantManagement from './pages/GapNoABTestingOrVariantMa
 import GapNoWebhooks from './pages/GapNoWebhooks';
 import CustomViewsPage from './pages/CustomViewsPage';
 
+import CodexCustomVizFeature from './pages/CodexCustomVizFeature';
+import CodexOperationsFeature from './pages/CodexOperationsFeature';
+
+import TimelineView from './pages/TimelineView';
+import ChannelFatiguePage from './pages/ChannelFatiguePage';
+
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
   return token ? children : <Navigate to="/" replace />;
@@ -49,6 +55,10 @@ function App() {
         }}
       />
       <Routes>
+        <Route path="/insights/timeline" element={<TimelineView />} />
+        <Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />
+        <Route path="/codex/operations" element={<CodexOperationsFeature />} />
+
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/advanced" element={<PrivateRoute><AdvancedTools /></PrivateRoute>} />
@@ -69,6 +79,7 @@ function App() {
         <Route path="/gap/no-a-b-testing-or-variant-management" element={<GapNoABTestingOrVariantManagement />} />
         <Route path="/gap/no-webhooks" element={<GapNoWebhooks />} />
         <Route path="/custom-views" element={<PrivateRoute><CustomViewsPage /></PrivateRoute>} />
+        <Route path="/channel-fatigue" element={<PrivateRoute><ChannelFatiguePage /></PrivateRoute>} />
       </Routes>
     </div>
   );

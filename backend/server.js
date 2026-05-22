@@ -89,6 +89,7 @@ app.use('/api/gap-no-webhooks', require('./routes/gap_no_webhooks'));
 
 // === Custom Views (format performance, channel heatmap, content plan PDF, repurposing rules) ===
 app.use('/api/custom-views', require('./routes/customViews'));
+app.use('/api/channel-fatigue', require('./routes/channelFatigue'));
 
 // 404 handler - MUST be last route handler
 app.use((req, res) => {
