@@ -1,5 +1,6 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('./config/runtime').validateRuntime();
 
 const express = require('express');
 const cors = require('cors');
@@ -17,8 +18,13 @@ const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
 
 // Middleware
+const corsOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',').map((origin) => origin.trim()).filter(Boolean);
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3100', 'http://127.0.0.1:3100'],
+  origin: (origin, callback) => {
+    if (!origin || corsOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked: ${origin}`));
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -65,27 +71,6 @@ app.use((err, req, res, next) => {
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
-
-// // === Batch 02 Gaps & Frontend Mounts ===
-app.use('/api/gap-schedule-analytics-lack-ai-endpoints-for-optimal-posting-tim', require('./routes/gap_schedule_analytics_lack_ai_endpoints_for_optimal_posting_tim'));
-
-// // === Batch 02 Gaps & Frontend Mounts ===
-app.use('/api/gap-missing-extract-key-points-generate-thumbnail-suggest-hashta', require('./routes/gap_missing_extract_key_points_generate_thumbnail_suggest_hashta'));
-
-// // === Batch 02 Gaps & Frontend Mounts ===
-app.use('/api/gap-limited-multi-channel-publishing-integrations-no-twitter-lin', require('./routes/gap_limited_multi_channel_publishing_integrations_no_twitter_lin'));
-
-// // === Batch 02 Gaps & Frontend Mounts ===
-app.use('/api/gap-no-content-approval-workflow', require('./routes/gap_no_content_approval_workflow'));
-
-// // === Batch 02 Gaps & Frontend Mounts ===
-app.use('/api/gap-no-audience-segmentation-or-personalization', require('./routes/gap_no_audience_segmentation_or_personalization'));
-
-// // === Batch 02 Gaps & Frontend Mounts ===
-app.use('/api/gap-no-a-b-testing-or-variant-management', require('./routes/gap_no_a_b_testing_or_variant_management'));
-
-// // === Batch 02 Gaps & Frontend Mounts ===
-app.use('/api/gap-no-webhooks', require('./routes/gap_no_webhooks'));
 
 // === Custom Views (format performance, channel heatmap, content plan PDF, repurposing rules) ===
 app.use('/api/custom-views', require('./routes/customViews'));
