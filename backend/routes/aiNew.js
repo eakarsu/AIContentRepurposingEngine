@@ -5,12 +5,13 @@ const authenticate = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/rateLimiter');
 
 const SYSTEM_PROMPT = 'You are an expert content strategist and copywriter. Transform content into engaging, platform-optimized formats while maintaining brand voice.';
-const MODEL = 'anthropic/claude-3-5-sonnet-20241022';
+const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3-5-sonnet-20241022';
 const MAX_CONTENT_BYTES = 50 * 1024;
 
 async function callOpenRouter(prompt) {
+  const baseUrl = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
   const response = await axios.post(
-    'https://openrouter.ai/api/v1/chat/completions',
+    `${baseUrl}/chat/completions`,
     {
       model: MODEL,
       messages: [
