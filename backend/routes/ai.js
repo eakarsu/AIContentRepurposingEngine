@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const axios = require('axios');
+const { complete } = require('../services/completion');
 const db = require('../db');
 const authenticate = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/rateLimiter');
@@ -11,7 +11,7 @@ const MODEL = 'anthropic/claude-3-5-sonnet-20241022';
 const MAX_CONTENT_BYTES = 50 * 1024; // 50 KB
 
 function validateContentSize(content) {
-  if (!content) return null;
+  if (typeof content !== 'string' || !content.trim()) return 'Source content must be nonempty text';
   const bytes = Buffer.byteLength(content, 'utf8');
   if (bytes > MAX_CONTENT_BYTES) {
     return `Content exceeds 50KB limit (${Math.round(bytes / 1024)}KB provided)`;
@@ -31,7 +31,7 @@ const FEATURE_PROMPTS = {
     `Create a compelling video script from this content. Include:\n1. An attention-grabbing intro hook (first 5 seconds)\n2. A brief intro/welcome segment\n3. Main content broken into clear sections with talking points\n4. Engagement prompts (ask viewers to comment/like)\n5. A strong call to action\n6. Outro\n\nFormat it with clear scene directions, on-screen text suggestions, and B-roll recommendations.\n\nTitle: ${title}\n\nSource Content:\n${content}`,
 
   podcast_notes: (title, content) =>
-    `Generate detailed podcast show notes from this content. Include:\n1. Episode title and subtitle\n2. Episode summary (2-3 sentences)\n3. Detailed timestamps with topic descriptions\n4. Key takeaways (bulleted list)\n5. Notable quotes from the content\n6. Resources and links mentioned\n7. Guest bio (if applicable)\n8. Call to action for listeners\n\nTitle: ${title}\n\nContent:\n${content}`,
+    `Generate detailed podcast show notes from this content. Include:\n1. Episode title and subtitle\n2. Episode summary (2-3 sentences)\n3. Source-provided timestamps with topic descriptions; omit if absent\n4. Key takeaways (bulleted list)\n5. Notable quotes from the content\n6. Resources and links mentioned\n7. Guest bio (if applicable)\n8. Call to action for listeners\n\nTitle: ${title}\n\nContent:\n${content}`,
 
   email_newsletters: (title, content) =>
     `Create an engaging email newsletter from this content. Include:\n1. Subject line (3 variations: curiosity-driven, benefit-driven, urgency-driven)\n2. Preview text\n3. Personalized greeting\n4. Opening hook\n5. Main body with clear sections and formatting\n6. Key takeaways or tips\n7. Call-to-action button text and context\n8. P.S. line\n\nTitle: ${title}\n\nContent:\n${content}`,
@@ -49,7 +49,7 @@ const FEATURE_PROMPTS = {
     `Create Instagram captions from this content. Provide:\n1. Main caption with engaging opening line (shown before "more")\n2. Body with emojis, line breaks, and storytelling\n3. Call-to-action (save, share, comment)\n4. 20-30 relevant hashtags organized by category (industry, topic, general)\n5. Alt text for accessibility\n\nProvide 3 variations: educational, inspirational, and conversational tone.\n\nTitle: ${title}\n\nContent:\n${content}`,
 
   youtube_descriptions: (title, content) =>
-    `Generate a YouTube video description from this content. Include:\n1. SEO-optimized first 2 lines (shown in search results)\n2. Detailed video summary\n3. Timestamps section (estimate logical timestamps)\n4. Key links section\n5. About the channel section\n6. Social media links placeholders\n7. Relevant tags (15-20)\n8. Hashtags (3-5 for above the title)\n9. Recommended cards and end screen suggestions\n\nTitle: ${title}\n\nContent:\n${content}`,
+    `Generate a YouTube video description from this content. Include:\n1. SEO-optimized first 2 lines (shown in search results)\n2. Detailed video summary\n3. Timestamps section (only timestamps supplied in the source; otherwise omit)\n4. Key links section\n5. About the channel section\n6. Social media links placeholders\n7. Relevant tags (15-20)\n8. Hashtags (3-5 for above the title)\n9. Recommended cards and end screen suggestions\n\nTitle: ${title}\n\nContent:\n${content}`,
 
   content_summaries: (title, content) =>
     `Summarize this content comprehensively. Provide:\n1. Executive Summary (2-3 sentences)\n2. Key Points (bulleted list of 5-7 main points)\n3. Detailed Summary (3-4 paragraphs)\n4. Action Items (specific next steps readers can take)\n5. TL;DR (one sentence)\n6. Target audience identification\n7. Content themes and categories\n\nTitle: ${title}\n\nContent:\n${content}`,
@@ -113,8 +113,8 @@ router.post('/generate', authenticate, aiRateLimiter, async (req, res) => {
       });
     }
 
-    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: process.env.OPENROUTER_MODEL,
+    const response = await complete( {
+      model: process.env.OPENROUTER_MODEL || MODEL,
       messages: [
         { role: 'system', content: 'You are an expert content strategist and copywriter.' },
         { role: 'user', content: prompt }
@@ -130,11 +130,11 @@ router.post('/generate', authenticate, aiRateLimiter, async (req, res) => {
 
     res.json({
       ai_output: aiOutput,
-      model: process.env.OPENROUTER_MODEL,
+      model: process.env.OPENROUTER_MODEL || MODEL,
       feature
     });
   } catch (err) {
-    console.error('AI generation error:', err.response?.data || err.message);
+    console.error('AI generation failed:', err.response?.status || err.status || 'provider_error');
     if (err.response?.status === 401) {
       return res.status(401).json({ error: 'Invalid OpenRouter API key' });
     }
@@ -178,8 +178,8 @@ router.post('/generate-and-save', authenticate, aiRateLimiter, async (req, res) 
       });
     }
 
-    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: process.env.OPENROUTER_MODEL,
+    const response = await complete( {
+      model: process.env.OPENROUTER_MODEL || MODEL,
       messages: [
         { role: 'system', content: 'You are an expert content strategist and copywriter.' },
         { role: 'user', content: prompt }
@@ -197,11 +197,11 @@ router.post('/generate-and-save', authenticate, aiRateLimiter, async (req, res) 
     let insertQuery, insertParams;
     if (feature === 'content_library') {
       insertQuery = `INSERT INTO ${table} (title, content, ai_output, status, category, user_id)
-                     VALUES ($1, $2, $3, 'completed', $4, $5) RETURNING *`;
+                     VALUES ($1, $2, $3, 'draft', $4, $5) RETURNING *`;
       insertParams = [title, content, aiOutput, req.body.category || null, req.user.id];
     } else {
       insertQuery = `INSERT INTO ${table} (title, content, ai_output, status, user_id)
-                     VALUES ($1, $2, $3, 'completed', $4) RETURNING *`;
+                     VALUES ($1, $2, $3, 'draft', $4) RETURNING *`;
       insertParams = [title, content, aiOutput, req.user.id];
     }
 
@@ -209,11 +209,11 @@ router.post('/generate-and-save', authenticate, aiRateLimiter, async (req, res) 
 
     res.status(201).json({
       item: result.rows[0],
-      model: process.env.OPENROUTER_MODEL,
+      model: process.env.OPENROUTER_MODEL || MODEL,
       feature
     });
   } catch (err) {
-    console.error('AI generate-and-save error:', err.response?.data || err.message);
+    console.error('AI generate-and-save error:', err.response?.status || err.status || 'provider_error');
     if (err.response?.status === 401) {
       return res.status(401).json({ error: 'Invalid OpenRouter API key' });
     }
@@ -270,8 +270,8 @@ Include:
 
 Follow AP style guidelines and keep it to one page (400-500 words).`;
 
-    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: MODEL,
+    const response = await complete( {
+      model: process.env.OPENROUTER_MODEL || MODEL,
       messages: [
         { role: 'system', content: CONTENT_SYSTEM_PROMPT },
         { role: 'user', content: prompt }
@@ -288,11 +288,11 @@ Follow AP style guidelines and keep it to one page (400-500 words).`;
       press_release: pressRelease,
       brand_name,
       announcement_type,
-      model: MODEL,
+      model: process.env.OPENROUTER_MODEL || MODEL,
       generated_at: new Date().toISOString()
     });
   } catch (err) {
-    console.error('press-release error:', err.response?.data || err.message);
+    console.error('press-release error:', err.response?.status || err.status || 'provider_error');
     res.status(500).json({ error: 'Failed to generate press release' });
   }
 });
@@ -365,8 +365,8 @@ router.get('/repurpose/stream', async (req, res) => {
 
     send('status', { message: 'AI is processing your content...', progress: 50 });
 
-    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: MODEL,
+    const response = await complete( {
+      model: process.env.OPENROUTER_MODEL || MODEL,
       messages: [
         { role: 'system', content: CONTENT_SYSTEM_PROMPT },
         { role: 'user', content: prompt }
@@ -387,7 +387,7 @@ router.get('/repurpose/stream', async (req, res) => {
       feature,
       content_id,
       ai_output: aiOutput,
-      model: MODEL,
+      model: process.env.OPENROUTER_MODEL || MODEL,
       progress: 100,
       generated_at: new Date().toISOString()
     });

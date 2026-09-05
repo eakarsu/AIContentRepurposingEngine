@@ -4,7 +4,7 @@ const db = require('../db');
 const authenticate = require('../middleware/auth');
 
 const VALID_PLATFORMS = ['twitter', 'linkedin', 'instagram', 'facebook', 'youtube', 'tiktok', 'email', 'blog', 'other'];
-const VALID_STATUSES = ['scheduled', 'published', 'cancelled'];
+const VALID_STATUSES = ['scheduled', 'cancelled'];
 
 /**
  * Ensure the scheduled_posts table exists (graceful init).
@@ -55,13 +55,18 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'publish_at must be in the future' });
     }
 
+    if (content_id !== undefined && content_id !== null) {
+      if (!Number.isSafeInteger(content_id) || content_id <= 0) return res.status(400).json({ error: 'Valid content_id required' });
+      const content = await db.query('SELECT id FROM content_library WHERE id=$1 AND user_id=$2', [content_id, req.user.id]);
+      if (!content.rows[0]) return res.status(404).json({ error: 'Content not found' });
+    }
     const result = await db.query(
       `INSERT INTO scheduled_posts (user_id, content_id, platform, publish_at, title, notes, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'scheduled') RETURNING *`,
       [req.user.id, content_id || null, platform.toLowerCase(), publishDate, title || null, notes || null]
     );
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({ ...result.rows[0], publicationMode: 'manual', message: 'Publication reminder saved. Publish manually through the platform.' });
   } catch (err) {
     console.error('schedule POST error:', err.message);
     res.status(500).json({ error: err.message });
@@ -145,6 +150,7 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
     const current = existing.rows[0];
+    if (current.status === 'published') return res.status(409).json({ error: 'Published history cannot be rescheduled' });
 
     let newPublishAt = current.publish_at;
     if (publish_at) {
@@ -156,7 +162,7 @@ router.put('/:id', authenticate, async (req, res) => {
 
     let newPlatform = current.platform;
     if (platform) {
-      if (!VALID_PLATFORMS.includes(platform.toLowerCase())) {
+      if (typeof platform !== 'string' || !VALID_PLATFORMS.includes(platform.toLowerCase())) {
         return res.status(400).json({ error: `platform must be one of: ${VALID_PLATFORMS.join(', ')}` });
       }
       newPlatform = platform.toLowerCase();
@@ -170,6 +176,7 @@ router.put('/:id', authenticate, async (req, res) => {
       newStatus = status;
     }
 
+    if (newStatus === 'scheduled' && newPublishAt <= new Date()) return res.status(400).json({ error: 'Scheduled publication time must be in the future' });
     const result = await db.query(
       `UPDATE scheduled_posts
        SET platform = $1, publish_at = $2, title = $3, notes = $4, status = $5, updated_at = NOW()

@@ -49,6 +49,7 @@ router.get('/:feature', validateFeature, async (req, res) => {
     const table = getTable(req.params.feature);
     const { status, search, limit = 50, offset = 0 } = req.query;
 
+    if (!/^\d+$/.test(String(limit)) || !/^\d+$/.test(String(offset)) || Number(limit) < 1 || Number(limit) > 100 || !Number.isSafeInteger(Number(offset))) return res.status(400).json({ error: 'limit must be 1–100 and offset must be a nonnegative safe integer' });
     let query = `SELECT * FROM ${table} WHERE user_id = $1`;
     const params = [req.user.id];
     let paramIndex = 2;
@@ -70,13 +71,9 @@ router.get('/:feature', validateFeature, async (req, res) => {
 
     const result = await db.query(query, params);
 
-    // Get total count
-    let countQuery = `SELECT COUNT(*) FROM ${table} WHERE user_id = $1`;
-    const countParams = [req.user.id];
-    if (status) {
-      countQuery += ` AND status = $2`;
-      countParams.push(status);
-    }
+    // Count the same filtered set that produced this page.
+    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*)').split(' ORDER BY')[0];
+    const countParams = params.slice(0, -2);
     const countResult = await db.query(countQuery, countParams);
 
     res.json({

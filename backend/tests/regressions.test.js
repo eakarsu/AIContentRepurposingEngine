@@ -1,0 +1,4 @@
+const test=require('node:test'),assert=require('node:assert/strict'),p=require('../services/contentWorkflow');
+test('caller headers cannot supply missing tenant membership',()=>{assert.throws(()=>p.context({id:1,role:'author'},'other',['author']),/membership/);assert.throws(()=>p.context({id:1,tenantId:'a',role:'author'},'b',['author']),/mismatch/);});
+test('source URIs reject credentials and plaintext transport',()=>{for(const sourceUri of ['https://user:pass@example.com/a','http://example.com/a','https://'])assert.throws(()=>p.validateIngest({sourceUri,sourceSha256:'a'.repeat(64),rightsBasis:'owned',rightsReference:'owner',idempotencyKey:'item-1'}));});
+test('out of range fidelity cannot authorize publication',()=>assert.throws(()=>p.canPublish({state:'approved',approvals:[{decision:'approved',role:'publisher'}],variants:[{status:'approved',factual_fidelity:2}]})));

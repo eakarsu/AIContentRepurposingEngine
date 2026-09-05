@@ -38,7 +38,7 @@ const NEW_FEATURES = [
   {
     id: 'cross-platform-calendar',
     title: 'Cross-Platform Content Calendar',
-    desc: 'Auto-schedule generated posts with optimal timing per platform.',
+    desc: 'Plan publication reminders for each platform. Posting is manual.',
     icon: FiCalendar,
     type: 'calendar',
   },

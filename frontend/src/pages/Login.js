@@ -79,7 +79,7 @@ function Login() {
             <span>or</span>
           </div>
           <button type="button" className="btn btn-secondary btn-full" onClick={autoFill}>
-            Auto-fill Demo Credentials
+            Auto Fill Demo Credentials
           </button>
         </form>
       </div>
