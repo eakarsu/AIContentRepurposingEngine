@@ -32,7 +32,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
 // Routes
+const createWebhooksRouter = require('./routes/webhooks');
+const createContentOptimizationRouter = require('./routes/contentOptimization');
 app.use('/api/auth', authRoutes);
+app.use('/api', createContentOptimizationRouter(require('./middleware/auth'), require('./db')));
+app.use('/api', createWebhooksRouter(require('../middleware/auth'), require('../db')));
 app.use('/api/content', contentRoutes);
 app.use('/api/ai', aiRoutes);
 
