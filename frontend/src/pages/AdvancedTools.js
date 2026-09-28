@@ -200,19 +200,19 @@ function AdvancedTools() {
         }, { headers });
         setResults(prev => ({ ...prev, [feature.id]: res.data.key_points || res.data }));
       } else if (feature.type === 'hashtags') {
+        // Backend contract: { content, platform }
         res = await axios.post(feature.endpoint, {
-          topic: data.topic || data.content || '',
+          content: data.topic || data.content || '',
           platform: data.platform || 'instagram',
-          count: parseInt(data.count, 10) || 15,
         }, { headers });
-        setResults(prev => ({ ...prev, [feature.id]: res.data.hashtags || res.data }));
+        setResults(prev => ({ ...prev, [feature.id]: res.data.result ?? res.data }));
       } else if (feature.type === 'thumbnails') {
+        // Backend contract: { content_summary, platform }
         res = await axios.post(feature.endpoint, {
-          topic: data.topic || '',
-          style: data.style || 'bold, high-contrast',
-          count: parseInt(data.count, 10) || 5,
+          content_summary: data.topic || data.content_summary || '',
+          platform: data.platform || 'youtube',
         }, { headers });
-        setResults(prev => ({ ...prev, [feature.id]: res.data.concepts || res.data.thumbnail_concepts || res.data }));
+        setResults(prev => ({ ...prev, [feature.id]: res.data.result ?? res.data }));
       } else if (feature.type === 'multi-language') {
         const langs = (data.target_languages || 'es,fr,ja')
           .split(',').map(s => s.trim()).filter(Boolean);
@@ -360,21 +360,13 @@ function AdvancedTools() {
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
-          <input className="form-input" type="number" min="5" max="30" placeholder="Count (default 15)"
-            value={val.count || ''} onChange={e => updateInput(feature.id, 'count', e.target.value)} />
         </>
       );
     }
     if (feature.type === 'thumbnails') {
       return (
-        <>
-          <input className="form-input" placeholder="Topic"
-            value={val.topic || ''} onChange={e => updateInput(feature.id, 'topic', e.target.value)} />
-          <input className="form-input" placeholder="Style (e.g. bold, high-contrast, minimalist)"
-            value={val.style || ''} onChange={e => updateInput(feature.id, 'style', e.target.value)} />
-          <input className="form-input" type="number" min="2" max="10" placeholder="Number of concepts (default 5)"
-            value={val.count || ''} onChange={e => updateInput(feature.id, 'count', e.target.value)} />
-        </>
+        <input className="form-input" placeholder="Content summary / topic"
+          value={val.topic || ''} onChange={e => updateInput(feature.id, 'topic', e.target.value)} />
       );
     }
     if (feature.type === 'multi-language') {

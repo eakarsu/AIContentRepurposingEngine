@@ -34,9 +34,14 @@ app.use(morgan('dev'));
 // Routes
 const createWebhooksRouter = require('./routes/webhooks');
 const createContentOptimizationRouter = require('./routes/contentOptimization');
+const createWorkflowRouter = require('./routes/workflow');
+const postingTimeRoutes = require('./routes/postingTime');
 app.use('/api/auth', authRoutes);
+app.use('/api/ai', postingTimeRoutes);
 app.use('/api', createContentOptimizationRouter(require('./middleware/auth'), require('./db')));
-app.use('/api', createWebhooksRouter(require('../middleware/auth'), require('../db')));
+app.use('/api', createWebhooksRouter(require('./middleware/auth'), require('./db')));
+// Governed rights/approval/publish workflow (services/contentWorkflow.js)
+app.use('/api/workflow', createWorkflowRouter(require('./db')));
 app.use('/api/content', contentRoutes);
 app.use('/api/ai', aiRoutes);
 

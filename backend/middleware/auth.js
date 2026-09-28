@@ -20,7 +20,11 @@ const authenticate = (req, res, next) => {
     req.user = {
       id: decoded.id,
       email: decoded.email,
-      name: decoded.name
+      name: decoded.name,
+      // Identity used by the governed workflow service: each account is its own
+      // tenant and approvals record the authenticated role.
+      role: decoded.role || 'author',
+      tenantId: decoded.tenantId || undefined,
     };
     next();
   } catch (err) {

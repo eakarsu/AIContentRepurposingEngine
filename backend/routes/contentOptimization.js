@@ -20,8 +20,9 @@ function createContentOptimizationRouter(authMiddleware, pool) {
   const router = express.Router();
 
   const schema = `
-    CREATE TABLE IF NOT EXISTS content_approvals (
+    CREATE TABLE IF NOT EXISTS content_approval_requests (
       id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
       content_id INTEGER NOT NULL,
       version INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'pending',
@@ -31,8 +32,9 @@ function createContentOptimizationRouter(authMiddleware, pool) {
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       decided_at TIMESTAMP
     );
-    CREATE TABLE IF NOT EXISTS content_variants (
+    CREATE TABLE IF NOT EXISTS content_ab_variants (
       id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
       content_id INTEGER NOT NULL,
       experiment_key TEXT NOT NULL,
       variant_label TEXT NOT NULL,
@@ -40,21 +42,33 @@ function createContentOptimizationRouter(authMiddleware, pool) {
       impressions INTEGER NOT NULL DEFAULT 0,
       clicks INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'draft',
-      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-      UNIQUE (content_id, experiment_key, variant_label)
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS content_segments (
       id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
       name TEXT NOT NULL,
       attribute TEXT NOT NULL,
       operator TEXT NOT NULL,
       value TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-      UNIQUE (name, attribute, operator, value)
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`;
 
+  // Existing databases were created without tenant scoping; add the column and
+  // replace the globally-unique keys with per-user keys. Additive and idempotent.
+  const schemaUpgrades = `
+    ALTER TABLE content_approval_requests ADD COLUMN IF NOT EXISTS user_id INTEGER;
+    ALTER TABLE content_ab_variants ADD COLUMN IF NOT EXISTS user_id INTEGER;
+    ALTER TABLE content_segments ADD COLUMN IF NOT EXISTS user_id INTEGER;
+    ALTER TABLE content_ab_variants DROP CONSTRAINT IF EXISTS content_ab_variants_content_id_experiment_key_variant_label_key;
+    ALTER TABLE content_segments DROP CONSTRAINT IF EXISTS content_segments_name_attribute_operator_value_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_content_ab_variant_user
+      ON content_ab_variants(user_id, content_id, experiment_key, variant_label);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_content_segments_user
+      ON content_segments(user_id, name, attribute, operator, value)`;
+
   let ready = false;
-  async function ensure() { if (!ready) { await pool.query(schema); ready = true; } }
+  async function ensure() { if (!ready) { await pool.query(schema); await pool.query(schemaUpgrades); ready = true; } }
 
   /* --------------------- approval state machine --------------------- */
   const APPROVAL_FLOW = {
@@ -66,12 +80,13 @@ function createContentOptimizationRouter(authMiddleware, pool) {
   router.post('/content/approvals', authMiddleware, async (req, res) => {
     try {
       await ensure();
-      const { contentId, authorEmail, version } = req.body || {};
+      const { contentId, version } = req.body || {};
       if (!contentId) return res.status(400).json({ error: 'contentId is required' });
+      // Author identity comes from the authenticated request, never the body.
       const r = await pool.query(
-        `INSERT INTO content_approvals (content_id, version, status, author_email)
-         VALUES ($1,$2,'pending',$3) RETURNING *`,
-        [contentId, version ?? 1, authorEmail ?? req.user?.email ?? null],
+        `INSERT INTO content_approval_requests (user_id, content_id, version, status, author_email)
+         VALUES ($1,$2,$3,'pending',$4) RETURNING *`,
+        [req.user.id, contentId, version ?? 1, req.user?.email ?? null],
       );
       res.status(201).json({ approval: r.rows[0], allowedTransitions: APPROVAL_FLOW.pending });
     } catch (e) { res.status(500).json({ error: e.message || 'Failed to open approval' }); }
@@ -80,24 +95,30 @@ function createContentOptimizationRouter(authMiddleware, pool) {
   router.post('/content/approvals/:id/decision', authMiddleware, async (req, res) => {
     try {
       await ensure();
-      const { decision, note, approverEmail } = req.body || {};
+      const { decision, note } = req.body || {};
       if (!['approved', 'rejected'].includes(decision)) {
         return res.status(400).json({ error: 'decision must be approved or rejected' });
       }
-      const cur = (await pool.query('SELECT * FROM content_approvals WHERE id = $1', [req.params.id])).rows[0];
+      // Approval requests are owned by the author's account; a decision is made
+      // by a different authenticated account (that is the point of independent
+      // review). The approver identity always comes from the token, never the body.
+      const cur = (await pool.query(
+        'SELECT * FROM content_approval_requests WHERE id = $1',
+        [req.params.id],
+      )).rows[0];
       if (!cur) return res.status(404).json({ error: 'Approval not found' });
       if (!(APPROVAL_FLOW[cur.status] ?? []).includes(decision)) {
         return res.status(409).json({ error: `Cannot move an approval from "${cur.status}" to "${decision}"`, allowedTransitions: APPROVAL_FLOW[cur.status] ?? [] });
       }
 
       // Independent approval: the approver must not be the author.
-      const approver = approverEmail ?? req.user?.email ?? null;
+      const approver = req.user?.email ?? null;
       if (approver && cur.author_email && approver === cur.author_email) {
         return res.status(403).json({ error: 'A piece of content cannot be approved by its own author.' });
       }
 
       const r = await pool.query(
-        `UPDATE content_approvals SET status = $2, approver_email = $3, decision_note = $4, decided_at = NOW()
+        `UPDATE content_approval_requests SET status = $2, approver_email = $3, decision_note = $4, decided_at = NOW()
          WHERE id = $1 RETURNING *`,
         [req.params.id, decision, approver, note ?? null],
       );
@@ -116,9 +137,9 @@ function createContentOptimizationRouter(authMiddleware, pool) {
       }
       if (!body || !String(body).trim()) return res.status(400).json({ error: 'body is required' });
       const r = await pool.query(
-        `INSERT INTO content_variants (content_id, experiment_key, variant_label, body)
-         VALUES ($1,$2,$3,$4) RETURNING *`,
-        [contentId, String(experimentKey).trim(), String(variantLabel).trim(), String(body)],
+        `INSERT INTO content_ab_variants (user_id, content_id, experiment_key, variant_label, body)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [req.user.id, contentId, String(experimentKey).trim(), String(variantLabel).trim(), String(body)],
       );
       res.status(201).json({ variant: r.rows[0] });
     } catch (e) {
@@ -135,8 +156,8 @@ function createContentOptimizationRouter(authMiddleware, pool) {
     try {
       await ensure();
       const rows = (await pool.query(
-        `SELECT * FROM content_variants WHERE experiment_key = $1 ORDER BY variant_label`,
-        [req.params.experimentKey],
+        `SELECT * FROM content_ab_variants WHERE experiment_key = $1 AND user_id = $2 ORDER BY variant_label`,
+        [req.params.experimentKey, req.user.id],
       )).rows;
 
       const evaluated = rows.map((v) => {
@@ -187,9 +208,9 @@ function createContentOptimizationRouter(authMiddleware, pool) {
         return res.status(400).json({ error: `operator must be one of: ${OPERATORS.join(', ')}` });
       }
       const r = await pool.query(
-        `INSERT INTO content_segments (name, attribute, operator, value)
-         VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING *`,
-        [String(name).trim(), String(attribute).trim(), operator, String(value).trim()],
+        `INSERT INTO content_segments (user_id, name, attribute, operator, value)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING *`,
+        [req.user.id, String(name).trim(), String(attribute).trim(), operator, String(value).trim()],
       );
       res.status(201).json({ segment: r.rows[0] ?? null, note: r.rows.length ? 'created' : 'rule already exists' });
     } catch (e) { res.status(500).json({ error: e.message || 'Failed to save segment rule' }); }
@@ -207,8 +228,8 @@ function createContentOptimizationRouter(authMiddleware, pool) {
         return res.status(400).json({ error: 'audience must be a non-empty array of attribute objects' });
       }
       const rules = (await pool.query(
-        `SELECT * FROM content_segments WHERE name = $1`,
-        [String(name ?? '').trim()],
+        `SELECT * FROM content_segments WHERE name = $1 AND user_id = $2`,
+        [String(name ?? '').trim(), req.user.id],
       )).rows;
       if (!rules.length) return res.status(404).json({ error: 'No rules found for that segment name' });
 

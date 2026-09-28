@@ -39,8 +39,8 @@ function ContentPlanPdf() {
         <FiFileText /> Content Plan (PDF)
       </h3>
       <p style={{ color: '#bbb', fontSize: 13, lineHeight: 1.5 }}>
-        Download a printable weekly cadence plan that bundles your active repurposing rules
-        and a snapshot of recent format performance.
+        Download a printable weekly cadence plan with your saved repurposing rules and the
+        provider performance snapshots recorded for your account. No estimated metrics are included.
       </p>
       <button
         type="button"

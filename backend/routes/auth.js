@@ -7,7 +7,13 @@ const authenticate = require('../middleware/auth');
 
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user.id, email: user.email, name: user.name },
+    {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role || 'author',
+      tenantId: user.tenant_id || undefined,
+    },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );

@@ -18,8 +18,21 @@ jobs:
         with: { node-version: 20, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
         working-directory: backend
-      - run: npm test
+      - name: Unit tests
+        run: npm test
         working-directory: backend
+      - name: Database integration tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/inspection_test_engine
+          RUN_DATABASE_TESTS: '1'
+        run: |
+          psql "postgres://postgres:postgres@localhost:5432/app_test" -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE inspection_test_engine'
+          for migration in migrations/*.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          npm test
       - run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/001_governed_content_workflow.sql
       - run: npm ci && npm run build
         working-directory: frontend

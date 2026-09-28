@@ -5,6 +5,7 @@ import axios from 'axios';
 // Pure SVG - no external chart library required.
 function FormatPerformanceChart() {
   const [data, setData] = useState([]);
+  const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [metric, setMetric] = useState('views');
@@ -12,14 +13,17 @@ function FormatPerformanceChart() {
   useEffect(() => {
     const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
     axios.get('/api/custom-views/format-performance', { headers })
-      .then((res) => setData(res.data.data || []))
+      .then((res) => {
+        setData(res.data.data || []);
+        setNote(res.data.note || '');
+      })
       .catch((e) => setError(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div style={{ padding: 16 }}>Loading format performance...</div>;
   if (error) return <div style={{ padding: 16, color: '#ff6b6b' }} data-testid="format-error">Error: {error}</div>;
-  if (!data.length) return <div style={{ padding: 16 }}>No data.</div>;
+  if (!data.length) return <div style={{ padding: 16 }} data-testid="format-empty">{note || 'No recorded performance data.'}</div>;
 
   const width = 720;
   const height = 320;
@@ -40,7 +44,7 @@ function FormatPerformanceChart() {
           style={{ background: '#0f0f1e', color: '#fff', border: '1px solid #6c63ff55', borderRadius: 6, padding: '4px 8px' }}
         >
           <option value="views">Views</option>
-          <option value="engagement">Engagement %</option>
+          <option value="engagement">Engagement</option>
           <option value="conversions">Conversions</option>
         </select>
       </div>

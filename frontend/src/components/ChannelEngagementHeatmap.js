@@ -19,7 +19,11 @@ function ChannelEngagementHeatmap() {
   if (error) return <div style={{ padding: 16, color: '#ff6b6b' }} data-testid="heatmap-error">Error: {error}</div>;
   if (!payload) return null;
 
-  const { x_labels, y_labels, matrix, min, max } = payload;
+  const { x_labels = [], y_labels = [], matrix = [], min = null, max = null, note } = payload;
+
+  if (!matrix.length || !y_labels.length) {
+    return <div style={{ padding: 16 }} data-testid="heatmap-empty">{note || 'No recorded channel engagement data.'}</div>;
+  }
 
   function colorFor(v) {
     const t = max === min ? 0.5 : (v - min) / (max - min);
@@ -78,6 +82,9 @@ function ChannelEngagementHeatmap() {
         }} />
         <span>high</span>
       </div>
+      {note && (
+        <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>{note}</div>
+      )}
     </div>
   );
 }

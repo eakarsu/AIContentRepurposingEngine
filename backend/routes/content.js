@@ -28,6 +28,13 @@ const getTable = (feature) => {
   return table;
 };
 
+// Statuses owned by the governed workflow service (backend/routes/workflow.js).
+// Setting them directly through this CRUD surface would bypass the rights basis,
+// independent review and recorded approvals that publication requires, so the
+// routes reject them and point callers at the workflow service.
+const WORKFLOW_MANAGED_STATUSES = new Set(['in_review', 'approved', 'scheduled', 'published', 'correction_required']);
+const WORKFLOW_HINT = 'Use the governed workflow service (/api/workflow/...) so the rights basis, review and approvals are recorded.';
+
 // Middleware to validate feature parameter
 const validateFeature = (req, res, next) => {
   const { feature } = req.params;
@@ -118,6 +125,13 @@ router.post('/:feature', validateFeature, async (req, res) => {
       return res.status(400).json({ error: 'Title is required' });
     }
 
+    if (WORKFLOW_MANAGED_STATUSES.has(String(status))) {
+      return res.status(409).json({
+        error: `Status "${status}" is managed by the governed content workflow and cannot be set directly.`,
+        hint: WORKFLOW_HINT,
+      });
+    }
+
     let query, params;
 
     if (req.params.feature === 'content_library') {
@@ -146,6 +160,13 @@ router.put('/:feature/:id', validateFeature, async (req, res) => {
   try {
     const table = getTable(req.params.feature);
     const { title, content, ai_output, status } = req.body;
+
+    if (status !== undefined && WORKFLOW_MANAGED_STATUSES.has(String(status))) {
+      return res.status(409).json({
+        error: `Status "${status}" is managed by the governed content workflow and cannot be set directly.`,
+        hint: WORKFLOW_HINT,
+      });
+    }
 
     // Check ownership
     const existing = await db.query(

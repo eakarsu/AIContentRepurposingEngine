@@ -15,10 +15,10 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(password, 10);
   await db.query(
-    `INSERT INTO users (email, password, name)
-     VALUES ($1, $2, $3)
+    `INSERT INTO users (email, password, name, role)
+     VALUES ($1, $2, $3, 'admin')
      ON CONFLICT (email) DO UPDATE
-     SET password = EXCLUDED.password, name = EXCLUDED.name`,
+     SET password = EXCLUDED.password, name = EXCLUDED.name, role = 'admin'`,
     [email, passwordHash, process.env.PROVISION_ADMIN_NAME || 'Runtime Administrator']
   );
 }
