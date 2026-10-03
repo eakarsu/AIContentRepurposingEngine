@@ -1,5 +1,6 @@
+import AppSidebar from './components/AppSidebar';
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -17,6 +18,15 @@ import ChannelFatiguePage from './pages/ChannelFatiguePage';
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
   return token ? children : <Navigate to="/" replace />;
+}
+
+function SidebarFrame({ children }) {
+  const location = useLocation();
+  const show = Boolean(localStorage.getItem('token')) && location.pathname !== '/';
+  return <div className={show ? 'codex-nav-shell' : undefined}>
+    {show && <AppSidebar />}
+    {children}
+  </div>;
 }
 
 function App() {
@@ -40,7 +50,7 @@ function App() {
           },
         }}
       />
-      <Routes>
+      <SidebarFrame><Routes>
         <Route path="/insights/timeline" element={<TimelineView />} />
         <Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />
         <Route path="/codex/operations" element={<CodexOperationsFeature />} />
@@ -54,7 +64,7 @@ function App() {
         <Route path="/custom-views" element={<PrivateRoute><CustomViewsPage /></PrivateRoute>} />
         <Route path="/channel-fatigue" element={<PrivateRoute><ChannelFatiguePage /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+      </Routes></SidebarFrame>
     </div>
   );
 }
