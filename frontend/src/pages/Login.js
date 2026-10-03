@@ -4,47 +4,6 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { FiZap } from 'react-icons/fi';
 
-function __demoAutofill() {
-  (async () => {
-    let email = "";
-    let password = "";
-    try {
-      const response = await fetch("/api/auth/demo-credentials", { cache: "no-store" });
-      if (response.ok) {
-        const data = await response.json();
-        email = data.email || data.username || "";
-        password = data.password || "";
-      }
-    } catch (error) {
-      /* fall back to build-time credentials below */
-    }
-    if (!email || !password) {
-      const env = (typeof process !== "undefined" && process.env) ? process.env : {};
-      email = email || env.REACT_APP_DEMO_EMAIL || env.VITE_DEMO_EMAIL || "";
-      password = password || env.REACT_APP_DEMO_PASSWORD || env.VITE_DEMO_PASSWORD || "";
-    }
-    const form = document.querySelector("form");
-    const setValue = (element, value) => {
-      if (!element) return;
-      const prototype = element.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(prototype, "value").set;
-      setter.call(element, value);
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-    };
-    const scope = form || document;
-    setValue(scope.querySelector('input[type="email"], input[name="email"], input[name="username"]') || scope.querySelectorAll("input")[0], email);
-    setValue(scope.querySelector('input[type="password"], input[name="password"]') || scope.querySelectorAll("input")[1], password);
-    window.setTimeout(() => {
-      if (form && typeof form.requestSubmit === "function") {
-        form.requestSubmit();
-      } else {
-        const submit = scope.querySelector('button[type="submit"], input[type="submit"]');
-        if (submit) submit.click();
-      }
-    }, 50);
-  })();
-}
-
 function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -119,7 +78,7 @@ function Login() {
           <div className="login-divider">
             <span>or</span>
           </div>
-          <button type="button" className="btn btn-secondary btn-full" onClick={__demoAutofill}>
+          <button type="button" className="btn btn-secondary btn-full" onClick={autoFill}>
             Auto Fill Demo Credentials
           </button>
         </form>
