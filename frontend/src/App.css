@@ -55,12 +55,14 @@ body {
 /* ===== LOGIN PAGE ===== */
 .login-page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--bg-dark-1) 0%, var(--bg-dark-2) 50%, var(--bg-dark-3) 100%);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .login-page::before {
@@ -1290,6 +1292,25 @@ body {
 }
 
 /* ===== RESPONSIVE ===== */
+@media (max-height: 720px) {
+  .login-page {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .login-card {
+    padding: 28px 24px;
+  }
+
+  .login-logo {
+    margin-bottom: 24px;
+  }
+
+  .login-form {
+    gap: 14px;
+  }
+}
+
 @media (max-width: 768px) {
   .navbar {
     padding: 0 16px;

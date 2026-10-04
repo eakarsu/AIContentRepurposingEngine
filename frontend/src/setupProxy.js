@@ -6,7 +6,16 @@ module.exports = function configureProxy(app) {
     '/api',
     createProxyMiddleware({
       target: `http://127.0.0.1:${backendPort}`,
-      changeOrigin: true
+      changeOrigin: true,
+      onProxyReq(proxyReq, req) {
+        try {
+          if (req.headers.origin && new URL(req.headers.origin).host === req.headers.host) {
+            proxyReq.removeHeader('origin');
+          }
+        } catch (_) {
+          // Leave malformed or cross-origin requests for the backend CORS policy.
+        }
+      }
     })
   );
 };

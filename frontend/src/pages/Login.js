@@ -11,12 +11,11 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const signIn = async (loginEmail, loginPassword) => {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('/api/auth/login', { email, password });
+      const res = await axios.post('/api/auth/login', { email: loginEmail, password: loginPassword });
       localStorage.setItem('token', res.data.token);
       if (res.data.user) {
         localStorage.setItem('user', JSON.stringify(res.data.user));
@@ -31,9 +30,26 @@ function Login() {
     }
   };
 
+  const handleLogin = (event) => {
+    event.preventDefault();
+    signIn(email, password);
+  };
+
   const autoFill = () => {
     setEmail(process.env.REACT_APP_DEMO_EMAIL || '');
     setPassword(process.env.REACT_APP_DEMO_PASSWORD || '');
+  };
+
+  const handleDemoLogin = () => {
+    const demoEmail = process.env.REACT_APP_DEMO_EMAIL || '';
+    const demoPassword = process.env.REACT_APP_DEMO_PASSWORD || '';
+    if (!demoEmail || !demoPassword) {
+      setError('Demo credentials are unavailable');
+      return;
+    }
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    signIn(demoEmail, demoPassword);
   };
 
   return (
@@ -50,6 +66,9 @@ function Login() {
         {error && <div className="login-error">{error}</div>}
 
         <form className="login-form" onSubmit={handleLogin}>
+          <button type="button" className="btn btn-secondary btn-full" onClick={autoFill} disabled={loading}>
+            Auto Fill Demo Credentials
+          </button>
           <div className="form-group">
             <label>Email Address</label>
             <input
@@ -78,8 +97,8 @@ function Login() {
           <div className="login-divider">
             <span>or</span>
           </div>
-          <button type="button" className="btn btn-secondary btn-full" onClick={autoFill}>
-            Auto Fill Demo Credentials
+          <button type="button" className="btn btn-secondary btn-full" onClick={handleDemoLogin} disabled={loading}>
+            Log In as Demo
           </button>
         </form>
       </div>

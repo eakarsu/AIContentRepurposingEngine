@@ -47,6 +47,11 @@ async function request(url, token, body, method = body !== undefined ? 'POST' : 
   return { status: response.status, body: await response.json().catch(() => ({})) };
 }
 
+async function uploadSource(url, token, bytes, mediaType = 'text/plain') {
+  const response = await fetch(url, { method: 'PUT', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream', 'x-source-media-type': mediaType, 'x-source-filename': 'source.txt' }, body: bytes });
+  return { status: response.status, body: await response.json().catch(() => ({})) };
+}
+
 test('publishing requires the governed workflow: rights, review and recorded approvals', { skip: !enabled }, async () => {
   requireTestDatabase();
   process.env.JWT_SECRET = 'inspection-session-key';
@@ -54,6 +59,9 @@ test('publishing requires the governed workflow: rights, review and recorded app
   const db = require('../db');
 
   await db.query(fs.readFileSync(path.join(__dirname, '../migrations/001_governed_content_workflow.sql'), 'utf8'));
+  await db.query(fs.readFileSync(path.join(__dirname, '../migrations/007_source_snapshots_and_evidence.sql'), 'utf8'));
+  await db.query(fs.readFileSync(path.join(__dirname, '../migrations/008_pdf_text_evidence.sql'), 'utf8'));
+  await db.query(fs.readFileSync(path.join(__dirname, '../migrations/009_pdf_ocr_evidence.sql'), 'utf8'));
 
   const contentRoutes = require('../routes/content');
   const workflowRoutes = require('../routes/workflow')(db);
@@ -68,6 +76,11 @@ test('publishing requires the governed workflow: rights, review and recorded app
   const authorWithReviewRole = jwt.sign({ id: 101, email: 'author@example.test', role: 'publisher', tenantId: 'user:101' }, process.env.JWT_SECRET);
   const otherTenant = jwt.sign({ id: 201, email: 'other@example.test', role: 'publisher', tenantId: 'user:201' }, process.env.JWT_SECRET);
   const idempotencyKey = `workflow-test-${crypto.randomBytes(6).toString('hex')}`;
+  const sourceText = 'A clear source sentence supports this article and its quoted claim.';
+  const sourceBytes = Buffer.from(sourceText);
+  const sourceSha256 = crypto.createHash('sha256').update(sourceBytes).digest('hex');
+  const variantBody = 'A sufficiently long draft body used by the governed workflow integration test.';
+  const evidenceSpans = [{ claimStart: 0, claimEnd: 12, claimText: variantBody.slice(0, 12), sourceStart: 0, sourceEnd: 23, sourceQuote: sourceText.slice(0, 23), sourceSha256 }];
 
   try {
     // 1. The generic CRUD surface cannot set workflow-managed statuses.
@@ -78,7 +91,7 @@ test('publishing requires the governed workflow: rights, review and recorded app
     // 2. Ingestion requires rights + digest and is idempotent.
     const ingestBody = {
       sourceUri: 'https://example.test/source',
-      sourceSha256: 'a'.repeat(64),
+      sourceSha256,
       rightsBasis: 'owned',
       rightsReference: 'contract-1',
       idempotencyKey,
@@ -89,6 +102,22 @@ test('publishing requires the governed workflow: rights, review and recorded app
     const replay = await request(`${app.base}/workflow/ingestions`, author, ingestBody);
     assert.equal(replay.status, 200);
     assert.equal(replay.body.replayed, true);
+    const sourceUrl = `${app.base}/workflow/workflows/${workflowId}/source`;
+    const blockedDraft = await request(`${app.base}/workflow/workflows/${workflowId}/variants`, author, {
+      channel: 'email', body: variantBody, sourceCitations: ['https://example.test/source#p1'], evidenceSpans,
+    });
+    assert.equal(blockedDraft.status, 409);
+    assert.equal((await uploadSource(sourceUrl, author, Buffer.from('wrong bytes'))).status, 422);
+    assert.equal((await uploadSource(sourceUrl, otherTenant, sourceBytes)).status, 404);
+    assert.equal((await uploadSource(sourceUrl, author, sourceBytes)).status, 201);
+    assert.equal((await uploadSource(sourceUrl, author, sourceBytes)).body.replayed, true);
+    const sourceDownload = await fetch(sourceUrl, { headers: { authorization: `Bearer ${author}` } });
+    assert.equal(sourceDownload.status, 200);
+    assert.deepEqual(Buffer.from(await sourceDownload.arrayBuffer()), sourceBytes);
+    assert.equal((await fetch(sourceUrl, { headers: { authorization: `Bearer ${otherTenant}` } })).status, 404);
+    assert.equal((await request(`${app.base}/workflow/workflows/${workflowId}`, reviewer)).body.source.source_text, sourceText);
+    await assert.rejects(db.query('DELETE FROM content_source_snapshots WHERE workflow_id=$1', [workflowId]), /immutable/);
+    await assert.rejects(db.query('UPDATE content_source_snapshots SET source_text=$1 WHERE workflow_id=$2', ['changed', workflowId]), /immutable/);
 
     // 3. Another tenant cannot see or advance the workflow.
     assert.equal((await request(`${app.base}/workflow/workflows/${workflowId}`, otherTenant, undefined)).status, 404);
@@ -97,21 +126,34 @@ test('publishing requires the governed workflow: rights, review and recorded app
     assert.equal((await request(`${app.base}/workflow/workflows/${workflowId}/transitions`, reviewer, { to: 'published', reason: 'skip everything' })).status, 422);
 
     // 5. Variants are validated (injection / fidelity) and reviewed independently.
+    const badSpan = await request(`${app.base}/workflow/workflows/${workflowId}/variants`, author, {
+      channel: 'email', body: variantBody, sourceCitations: ['https://example.test/source#p1'], evidenceSpans: [{ ...evidenceSpans[0], sourceQuote: 'fabricated quote' }],
+    });
+    assert.equal(badSpan.status, 422);
     const variant = await request(`${app.base}/workflow/workflows/${workflowId}/variants`, author, {
       channel: 'email',
-      body: 'A sufficiently long draft body used by the governed workflow integration test.',
+      body: variantBody,
       sourceCitations: ['https://example.test/source#p1'],
+      evidenceSpans,
       brandEvaluation: { passed: true },
       accessibilityEvaluation: { passed: true },
       factualFidelity: 0.95,
     });
     assert.equal(variant.status, 201, JSON.stringify(variant.body));
+    assert.equal(variant.body.variant.brand_evaluation.passed, false);
+    assert.equal(Number(variant.body.variant.factual_fidelity), 0);
     const variantId = variant.body.variant.id;
 
     const selfReview = await request(`${app.base}/workflow/workflows/${workflowId}/variants/${variantId}/decision`, authorWithReviewRole, { decision: 'approved', rationale: 'self review' });
     assert.equal(selfReview.status, 403);
-    const review = await request(`${app.base}/workflow/workflows/${workflowId}/variants/${variantId}/decision`, reviewer, { decision: 'approved', rationale: 'independent review' });
+    const missingChecks = await request(`${app.base}/workflow/workflows/${workflowId}/variants/${variantId}/decision`, reviewer, { decision: 'approved', rationale: 'independent review' });
+    assert.equal(missingChecks.status, 422);
+    const missingEvidenceConfirmation = await request(`${app.base}/workflow/workflows/${workflowId}/variants/${variantId}/decision`, reviewer, { decision: 'approved', rationale: 'independent review', brandPassed: true, accessibilityPassed: true, factualFidelity: 0.95 });
+    assert.equal(missingEvidenceConfirmation.status, 422);
+    const review = await request(`${app.base}/workflow/workflows/${workflowId}/variants/${variantId}/decision`, reviewer, { decision: 'approved', rationale: 'independent review', brandPassed: true, accessibilityPassed: true, sourceReviewConfirmed: true, factualFidelity: 0.95 });
     assert.equal(review.status, 200);
+    assert.equal(review.body.variant.brand_evaluation.reviewedBy, '102');
+    assert.equal(review.body.variant.source_evaluation.confirmed, true);
 
     // 6. Approved state requires a recorded approval.
     assert.equal((await request(`${app.base}/workflow/workflows/${workflowId}/submit`, author, {})).status, 200);

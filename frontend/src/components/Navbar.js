@@ -45,6 +45,7 @@ function Navbar({ breadcrumbs = [] }) {
         )}
       </div>
       <div className="navbar-right">
+        <Link to="/governed-workflow" className="btn btn-outline" style={{ marginRight: 12, padding: '6px 12px' }}>Governed Workflow</Link>
         <Link to="/advanced" className="btn btn-outline" style={{ marginRight: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px' }}>
           <FiTrendingUp /> Advanced
         </Link>

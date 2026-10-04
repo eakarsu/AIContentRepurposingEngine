@@ -14,6 +14,7 @@ import CodexOperationsFeature from './pages/CodexOperationsFeature';
 
 import TimelineView from './pages/TimelineView';
 import ChannelFatiguePage from './pages/ChannelFatiguePage';
+import GovernedWorkflow from './pages/GovernedWorkflow';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
@@ -57,6 +58,7 @@ function App() {
 
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+        <Route path="/governed-workflow" element={<PrivateRoute><GovernedWorkflow /></PrivateRoute>} />
         <Route path="/advanced" element={<PrivateRoute><AdvancedTools /></PrivateRoute>} />
         <Route path="/feature/:featureName" element={<PrivateRoute><FeaturePage /></PrivateRoute>} />
         <Route path="/feature/:featureName/:id" element={<PrivateRoute><ItemDetail /></PrivateRoute>} />

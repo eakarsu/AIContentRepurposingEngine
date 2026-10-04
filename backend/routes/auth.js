@@ -12,7 +12,7 @@ const generateToken = (user) => {
       email: user.email,
       name: user.name,
       role: user.role || 'author',
-      tenantId: user.tenant_id || undefined,
+      tenantId: user.tenant_id || `user:${user.id}`,
     },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
@@ -48,7 +48,9 @@ router.post('/login', async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name
+        name: user.name,
+        role: user.role || 'author',
+        tenantId: user.tenant_id || `user:${user.id}`
       }
     });
   } catch (err) {
@@ -87,7 +89,9 @@ router.post('/register', async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name
+        name: user.name,
+        role: user.role || 'author',
+        tenantId: user.tenant_id || `user:${user.id}`
       }
     });
   } catch (err) {
@@ -100,7 +104,7 @@ router.post('/register', async (req, res) => {
 router.get('/me', authenticate, async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT id, email, name, created_at FROM users WHERE id = $1',
+      "SELECT id, email, name, role, COALESCE(tenant_id, 'user:' || id) AS tenant_id, created_at FROM users WHERE id = $1",
       [req.user.id]
     );
 
