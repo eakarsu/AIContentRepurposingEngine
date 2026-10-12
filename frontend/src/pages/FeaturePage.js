@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import toast from 'react-hot-toast';
 import { FiArrowLeft, FiPlus, FiTrash2 } from 'react-icons/fi';
 import Navbar from '../components/Navbar';
 import CreateModal from '../components/CreateModal';
+import ContentRecordDialog from '../components/ContentRecordDialog';
 
 const FEATURE_INFO = {
   content_library: { title: 'Content Library', desc: 'Store and manage your original content pieces' },
@@ -30,36 +30,29 @@ function FeaturePage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [error, setError] = useState('');
+  const pendingList = useRef(null);
 
   const info = FEATURE_INFO[featureName] || { title: featureName, desc: '' };
-  const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
 
   const fetchItems = useCallback(async () => {
+    pendingList.current?.abort(); const controller = new AbortController(); pendingList.current = controller;
+    setLoading(true); setError('');
     try {
-      const res = await axios.get(`/api/content/${featureName}`, { headers });
-      const data = res.data;
-      setItems(Array.isArray(data) ? data : (data.items || []));
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
+      const response = await axios.get(`/api/content/${featureName}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setItems(Array.isArray(response.data) ? response.data : response.data.items || []);
+    } catch (failure) { if (!controller.signal.aborted) setError(failure.response?.data?.error || 'Content records could not be loaded.'); }
+    finally { if (!controller.signal.aborted) setLoading(false); }
   }, [featureName]);
 
   useEffect(() => {
-    fetchItems();
+    setSelected(null); setShowModal(false); fetchItems();
+    return () => pendingList.current?.abort();
   }, [fetchItems]);
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation();
-    try {
-      await axios.delete(`/api/content/${featureName}/${id}`, { headers });
-      toast.success('Item deleted');
-      fetchItems();
-    } catch {
-      toast.error('Failed to delete');
-    }
-  };
+  const handleDelete = (event, id) => { event.stopPropagation(); setSelected({ id, mode: 'delete' }); };
 
   const formatDate = (d) => {
     if (!d) return '-';
@@ -93,6 +86,7 @@ function FeaturePage() {
           </button>
         </div>
 
+        {error && <div className="sr-alert" role="alert">{error}<button type="button" className="btn btn-outline" onClick={() => fetchItems()}>Retry</button></div>}
         {loading ? (
           <div className="loading-container">
             <div className="spinner spinner-dark loading-large" />
@@ -122,7 +116,7 @@ function FeaturePage() {
               </thead>
               <tbody>
                 {items.map(item => (
-                  <tr key={item._id || item.id} onClick={() => navigate(`/feature/${featureName}/${item._id || item.id}`)}>
+                  <tr key={item._id || item.id} tabIndex={0} aria-label={`View ${item.title || 'content record'}`} onClick={() => setSelected({ id: item.id || item._id, mode: 'view' })} onKeyDown={(event) => { if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) { event.preventDefault(); setSelected({ id: item.id || item._id, mode: 'view' }); } }}>
                     <td className="table-title">{item.title || 'Untitled'}</td>
                     <td>
                       <span className={statusClass(item.status)}>
@@ -131,6 +125,7 @@ function FeaturePage() {
                     </td>
                     <td className="table-date">{formatDate(item.createdAt || item.created_at)}</td>
                     <td className="table-actions" onClick={(e) => e.stopPropagation()}>
+                      <button type="button" className="btn btn-ghost" onClick={() => setSelected({ id: item.id || item._id, mode: 'view' })}>View</button>
                       <button className="btn-icon btn-icon-danger" onClick={(e) => handleDelete(e, item._id || item.id)} title="Delete">
                         <FiTrash2 />
                       </button>
@@ -143,6 +138,7 @@ function FeaturePage() {
         )}
       </div>
 
+      {selected && <ContentRecordDialog key={`${featureName}/${selected.id}`} featureName={featureName} itemId={selected.id} initialMode={selected.mode} onClose={() => setSelected(null)} onChanged={fetchItems}/>}
       {showModal && (
         <CreateModal
           featureName={featureName}

@@ -9,6 +9,7 @@ import {
 } from 'react-icons/fi';
 import Navbar from '../components/Navbar';
 import AIOutput from '../components/AIOutput';
+import AIFieldPresets, { completeExample } from '../components/AIFieldPresets';
 
 const NEW_FEATURES = [
   {
@@ -133,6 +134,25 @@ const NEW_FEATURES = [
     endpoint: '/api/ai/audience-segment',
   },
 ];
+
+const EXAMPLE_FIELDS = {
+  'ab-test': ['headline', 'num_variants'],
+  'content-series': ['topic', 'num_pieces', 'platforms'],
+  'tone-matcher': ['reference_content', 'target_tone'],
+  'key-points': ['content', 'max_points', 'style'],
+  hashtags: ['topic', 'platform'],
+  thumbnails: ['topic'],
+  'multi-language': ['content', 'target_languages', 'preserve_tone'],
+  'predict-performance': ['content', 'platform', 'audience_description', 'historical_summary'],
+  'expand-content': ['seed', 'target_formats', 'brand_voice'],
+  'audience-segment': ['content_or_brief', 'platforms'],
+};
+const EXAMPLE_SCENARIOS = [
+  { label: 'Team guide', values: { headline: 'A practical guide to more useful team meetings', num_variants: 4, topic: 'A practical guide to more useful team meetings', num_pieces: 4, platforms: 'linkedin, email', reference_content: 'A useful meeting starts with a clear agenda, ends with named owners, and shares a short recap. These are illustrative editorial notes, not measured outcomes.', target_tone: 'Clear, helpful and professional', content: 'A useful meeting starts with a clear agenda, ends with named owners, and shares a short recap. Explain each step without inventing performance claims.', max_points: 5, style: 'concise', platform: 'linkedin', target_languages: 'es, fr', preserve_tone: 'true', audience_description: 'Team leads planning recurring meetings', historical_summary: 'No historical performance data is available; treat estimates as hypothetical.', seed: 'Help team leads organize recurring meetings with an agenda, owners and recap.', target_formats: 'blog, newsletter, linkedin', brand_voice: 'Practical and direct; avoid unsupported claims.', content_or_brief: 'Explain a simple meeting checklist for team leads and new project owners.' } },
+  { label: 'Launch plan', values: { headline: 'Plan a product launch with a clearer checklist', num_variants: 5, topic: 'A project launch checklist for small teams', num_pieces: 5, platforms: 'blog, linkedin, instagram', reference_content: 'A launch checklist should name the intended audience, timeline, owners, review steps and open questions. The example does not claim a real launch or customer results.', target_tone: 'Confident and accessible', content: 'A launch checklist includes audience, timeline, owners, review steps and open questions. Use these illustrative notes to outline the work.', max_points: 7, style: 'detailed', platform: 'instagram', target_languages: 'de, pt-br', preserve_tone: 'false', audience_description: 'Small business owners preparing a first launch', historical_summary: 'No campaign metrics supplied; use general assumptions only.', seed: 'Turn a small-team launch checklist into an educational content series.', target_formats: 'blog, tweet-thread, newsletter', brand_voice: 'Friendly and specific; identify assumptions.', content_or_brief: 'Help small teams understand launch planning without claiming a real campaign.' } },
+  { label: 'Evidence review', values: { headline: 'Four questions to ask before sharing a recommendation', num_variants: 6, topic: 'How to check evidence behind a recommendation', num_pieces: 6, platforms: 'youtube, email, linkedin', reference_content: 'Before sharing advice, check the source, collection date, relevance and uncertainty. This is an illustrative review framework, not a finding about a real study.', target_tone: 'Thoughtful and concise', content: 'Check who produced the evidence, when it was collected, whether it answers the question, and which uncertainties remain.', max_points: 6, style: 'quotable', platform: 'youtube', target_languages: 'ja, es', preserve_tone: 'true', audience_description: 'Readers evaluating online recommendations', historical_summary: 'No prior engagement data supplied; do not present estimates as observations.', seed: 'Teach readers four questions for evaluating the evidence behind a recommendation.', target_formats: 'newsletter, tiktok-script, blog', brand_voice: 'Measured and transparent about uncertainty.', content_or_brief: 'Segment audiences for an educational guide about evaluating evidence.' } },
+];
+const exampleFields = (type) => (EXAMPLE_FIELDS[type] || []).map((key) => ({ key, type: ['num_variants', 'num_pieces', 'max_points'].includes(key) ? 'number' : 'text' }));
 
 function AdvancedTools() {
   const navigate = useNavigate();
@@ -554,6 +574,7 @@ function AdvancedTools() {
               <h3 style={{ marginBottom: 12 }}>{feature.title}</h3>
               <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>{feature.desc}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {feature.endpoint && <AIFieldPresets fields={exampleFields(feature.type)} samples={EXAMPLE_SCENARIOS} context={feature.title} disabled={loading === feature.id} onFill={(sample, index) => setInputs(prev => ({ ...prev, [feature.id]: completeExample(exampleFields(feature.type), { ...sample, values: { ...sample.values, ...(feature.presetTone ? { target_tone: feature.presetTone } : {}) } }, index, feature.title, prev[feature.id] || {}) }))} />}
                 {renderPanelInputs(feature)}
                 {feature.type === 'calendar' ? (
                   <p style={{ color: 'var(--text-secondary)' }}>Use the Content Calendar above to schedule posts across platforms.</p>
@@ -567,7 +588,7 @@ function AdvancedTools() {
                   </button>
                 )}
               </div>
-              {results[feature.id] && (
+              {results[feature.id] !== undefined && results[feature.id] !== null && (
                 <AIOutput content={results[feature.id]} />
               )}
             </div>

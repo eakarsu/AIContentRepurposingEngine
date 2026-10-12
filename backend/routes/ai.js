@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { complete } = require('../services/completion');
+const { requestCancellation } = require('../services/requestCancellation');
 const db = require('../db');
 const authenticate = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/rateLimiter');
@@ -87,17 +88,18 @@ const FEATURE_TABLE_MAP = {
 
 // POST /api/ai/generate
 router.post('/generate', authenticate, aiRateLimiter, async (req, res) => {
+  const cancellation = requestCancellation(req, res);
   try {
     const { feature, title, content } = req.body;
 
-    if (!feature || !title || !content) {
-      return res.status(400).json({ error: 'Feature, title, and content are required' });
+    if (typeof feature !== 'string' || typeof title !== 'string' || !title.trim() || title.length > 500 || !content) {
+      return res.status(400).json({ error: 'Feature, source content, and a title of up to 500 characters are required' });
     }
 
     const sizeError = validateContentSize(content);
     if (sizeError) return res.status(400).json({ error: sizeError });
 
-    const promptFn = FEATURE_PROMPTS[feature];
+    const promptFn = Object.hasOwn(FEATURE_PROMPTS, feature) ? FEATURE_PROMPTS[feature] : null;
     if (!promptFn) {
       return res.status(400).json({
         error: `Invalid feature: ${feature}`,
@@ -120,20 +122,24 @@ router.post('/generate', authenticate, aiRateLimiter, async (req, res) => {
         { role: 'user', content: prompt }
       ]
     }, {
+      signal: cancellation.signal,
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json'
       }
     });
 
+    cancellation.assertActive();
     const aiOutput = response.data.choices[0].message.content;
 
     res.json({
       ai_output: aiOutput,
-      model: process.env.OPENROUTER_MODEL || MODEL,
+      model: response.data.model || process.env.OPENROUTER_MODEL || MODEL,
+      usage: response.data.usage || null,
       feature
     });
   } catch (err) {
+    if (cancellation.signal.aborted) return;
     console.error('AI generation failed:', err.response?.status || err.status || 'provider_error');
     if (err.response?.status === 401) {
       return res.status(401).json({ error: 'Invalid OpenRouter API key' });
@@ -142,22 +148,24 @@ router.post('/generate', authenticate, aiRateLimiter, async (req, res) => {
       return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
     }
     res.status(500).json({ error: 'Failed to generate AI content' });
-  }
+  } finally { cancellation.dispose(); }
 });
 
 // POST /api/ai/generate-and-save
 router.post('/generate-and-save', authenticate, aiRateLimiter, async (req, res) => {
+  const cancellation = requestCancellation(req, res);
+  let client; let transactionOpen = false;
   try {
     const { feature, title, content } = req.body;
 
-    if (!feature || !title || !content) {
-      return res.status(400).json({ error: 'Feature, title, and content are required' });
+    if (typeof feature !== 'string' || typeof title !== 'string' || !title.trim() || title.length > 500 || !content) {
+      return res.status(400).json({ error: 'Feature, source content, and a title of up to 500 characters are required' });
     }
 
     const sizeError = validateContentSize(content);
     if (sizeError) return res.status(400).json({ error: sizeError });
 
-    const promptFn = FEATURE_PROMPTS[feature];
+    const promptFn = Object.hasOwn(FEATURE_PROMPTS, feature) ? FEATURE_PROMPTS[feature] : null;
     if (!promptFn) {
       return res.status(400).json({
         error: `Invalid feature: ${feature}`,
@@ -170,6 +178,7 @@ router.post('/generate-and-save', authenticate, aiRateLimiter, async (req, res) 
       return res.status(400).json({ error: `No table mapping for feature: ${feature}` });
     }
 
+    if (feature === 'content_library' && req.body.category != null && (typeof req.body.category !== 'string' || req.body.category.length > 100)) return res.status(400).json({ error: 'Category must be text of up to 100 characters' });
     const prompt = promptFn(title, content);
 
     if (!process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY === 'your-openrouter-key-here') {
@@ -185,12 +194,14 @@ router.post('/generate-and-save', authenticate, aiRateLimiter, async (req, res) 
         { role: 'user', content: prompt }
       ]
     }, {
+      signal: cancellation.signal,
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json'
       }
     });
 
+    cancellation.assertActive();
     const aiOutput = response.data.choices[0].message.content;
 
     // Save to database
@@ -205,14 +216,20 @@ router.post('/generate-and-save', authenticate, aiRateLimiter, async (req, res) 
       insertParams = [title, content, aiOutput, req.user.id];
     }
 
-    const result = await db.query(insertQuery, insertParams);
+    client = await db.pool.connect(); cancellation.assertActive();
+    await client.query('BEGIN'); transactionOpen = true;
+    const result = await client.query(insertQuery, insertParams); cancellation.assertActive();
+    await client.query('COMMIT'); transactionOpen = false;
 
     res.status(201).json({
       item: result.rows[0],
-      model: process.env.OPENROUTER_MODEL || MODEL,
+      model: response.data.model || process.env.OPENROUTER_MODEL || MODEL,
+      usage: response.data.usage || null,
       feature
     });
   } catch (err) {
+    if (transactionOpen) await client.query('ROLLBACK').catch(() => {});
+    if (cancellation.signal.aborted) return;
     console.error('AI generate-and-save error:', err.response?.status || err.status || 'provider_error');
     if (err.response?.status === 401) {
       return res.status(401).json({ error: 'Invalid OpenRouter API key' });
@@ -221,7 +238,7 @@ router.post('/generate-and-save', authenticate, aiRateLimiter, async (req, res) 
       return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
     }
     res.status(500).json({ error: 'Failed to generate and save AI content' });
-  }
+  } finally { client?.release(); cancellation.dispose(); }
 });
 
 /**

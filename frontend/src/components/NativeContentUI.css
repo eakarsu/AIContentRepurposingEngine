@@ -1,0 +1,4 @@
+.native-content-ui{--surface:var(--bg-white,#fff);--surface-alt:var(--bg-gray-2,#f1f3f9);--text:var(--text-primary,#1a1a2e);--muted:var(--text-secondary,#6b7280);--danger:#b91c1c}
+.native-content-ui .sr-dialog-footer{flex-wrap:wrap}
+.feature-page tbody tr[tabindex]{cursor:pointer}
+.feature-page tbody tr[tabindex]:focus-visible{outline:2px solid #6366f1;outline-offset:-2px}

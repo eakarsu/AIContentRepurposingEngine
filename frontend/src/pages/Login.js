@@ -36,8 +36,15 @@ function Login() {
   };
 
   const autoFill = () => {
-    setEmail(process.env.REACT_APP_DEMO_EMAIL || '');
-    setPassword(process.env.REACT_APP_DEMO_PASSWORD || '');
+    const demoEmail = process.env.REACT_APP_DEMO_EMAIL || '';
+    const demoPassword = process.env.REACT_APP_DEMO_PASSWORD || '';
+    if (!demoEmail || !demoPassword) {
+      setError('Demo credentials are unavailable in this deployment.');
+      return;
+    }
+    setError('');
+    setEmail(demoEmail);
+    setPassword(demoPassword);
   };
 
   const handleDemoLogin = () => {

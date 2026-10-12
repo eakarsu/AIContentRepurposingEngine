@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import Navbar from '../components/Navbar';
+import AIFieldPresets from '../components/AIFieldPresets';
 import './GovernedWorkflow.css';
 
 const CHANNELS = ['web', 'email', 'linkedin', 'instagram', 'youtube', 'podcast', 'short_video'];
@@ -287,6 +288,12 @@ export default function GovernedWorkflow() {
               {selected.source.source_text !== null ? <><label>{selected.source.source_extraction ? 'Extracted PDF text' : 'Stored text'} (select a supporting quote here)<textarea ref={sourceTextRef} readOnly value={selected.source.source_text} rows="12" /></label><button type="button" onClick={useSelectedExcerpt}>Use selection for AI suggestion</button></> : <p>Binary source: download and inspect it. Automated text span evidence is unavailable for this format.</p>}
             </div> : <div className="governed-content-source"><p>This registered source has no uploaded snapshot yet. Drafting and publication are blocked until matching bytes are stored.</p><label>Matching source file<input ref={existingFileRef} type="file" accept=".txt,.md,.pdf,.png,.jpg,.jpeg,text/plain,text/markdown,application/pdf,image/png,image/jpeg" onChange={event => setExistingSourceFile(event.target.files?.[0] || null)} /></label><button type="button" disabled={busy || !existingSourceFile} onClick={uploadExisting}>Upload matching bytes</button></div>}
             <h4>Create a cited draft</h4>
+            <AIFieldPresets fields={[{ key: 'channel', label: 'Channel' }, { key: 'title', label: 'Source title' }, { key: 'body', label: 'Draft body' }, { key: 'citations', label: 'Source citations' }]} samples={[
+              { label: 'Web summary', values: { channel: 'web', title: 'Clear summary of the selected source' } },
+              { label: 'Email brief', values: { channel: 'email', title: 'Useful points from the selected source' } },
+              { label: 'LinkedIn post', values: { channel: 'linkedin', title: 'What the selected source explains' } },
+            ]} context="governed draft" heading="Fill source-based draft fields" description="Examples fill the channel and title, then use your selected source excerpt and its real reference for the draft body and citation. Select an excerpt first; examples never choose a file or source for you." disabled={busy} onFill={(sample) => { setDraft(current => ({ ...current, channel: sample.values.channel, title: sample.values.title, body: current.excerpt.trim() || current.body, citations: selected.workflow.source_uri || current.citations, evidenceSpans: current.excerpt.trim() ? [] : current.evidenceSpans })); setError(''); }} />
+            {!draft.excerpt.trim() && <p>Select an excerpt from the stored source before requesting an AI suggestion. The examples keep the selected excerpt and uploaded source unchanged.</p>}
             <form onSubmit={saveVariant}>
               <label>Channel <select value={draft.channel} onChange={event => setDraft({ ...draft, channel: event.target.value })}>{CHANNELS.map(channel => <option key={channel}>{channel}</option>)}</select></label>
               <label>Source title <input value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></label>
