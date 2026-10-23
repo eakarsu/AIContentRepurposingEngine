@@ -85,6 +85,9 @@ app.use((err, req, res, next) => {
 app.use('/api/custom-views', require('./routes/customViews'));
 app.use('/api/channel-fatigue', require('./routes/channelFatigue'));
 
+const fp31cContent = require('./routes/fp31c').createFeaturePack({ authenticate: require('./middleware/auth'), getRecords: async (req) => { try { const r = await require('./db').query('SELECT title, content, status FROM content_library WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50', [req.user.id]); return r.rows; } catch { return []; } } });
+app.use('/api/tasks', fp31cContent.tasksRouter);
+app.use('/api/fp31c', fp31cContent.packRouter);
 // 404 handler - MUST be last route handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found', path: req.originalUrl });
